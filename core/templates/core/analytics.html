@@ -1,0 +1,239 @@
+{% extends "core/base.html" %}
+{% block title %}Analytics — Malaria Tracking{% endblock %}
+{% block header_title %}Analytics &amp; Predictions{% endblock %}
+
+{% block content %}
+<style>
+    .cm-grid { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; max-width: 460px; margin: 0.5rem auto 0; align-items: stretch; }
+    .cm-head { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: flex; align-items: center; justify-content: center; padding: 0.4rem; text-align: center; }
+    .cm-cell { border-radius: 12px; padding: 1.3rem 0.5rem; text-align: center; color: white; }
+    .cm-cell .n { font-size: 1.7rem; font-weight: 800; display: block; }
+    .cm-cell .t { font-size: 0.72rem; font-weight: 600; opacity: 0.9; }
+    .cm-good { background: #059669; } .cm-bad { background: #dc2626; }
+</style>
+
+<div class="page-title">Analytics &amp; ML Predictions</div>
+<div class="page-subtitle">Results from PySpark MLlib (Random Forest + Gradient Boosted Trees), trained on pipeline data</div>
+<div class="refresh-note" id="autoRefreshNote">Auto-refreshing every 30 seconds</div>
+<div class="refresh-track"><div class="refresh-fill" id="autoRefreshFill" style="animation-duration: 30s;"></div></div>
+
+{% if at_risk_regions %}
+<div class="alert-banner">
+    <svg class="icon" viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+    <span>ALERT — {{ at_risk_regions|length }} region(s) at risk of an epidemic outbreak:
+        {% for r in at_risk_regions %}{{ r.region_id }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </span>
+</div>
+{% endif %}
+
+<!-- ================= MODEL 2 : OUTBREAK ================= -->
+<div class="page-title" style="font-size:1.2rem;margin-top:0.5rem;">Model 2 — Regional Outbreak Forecast <span class="model-tag">GBT</span></div>
+{% if training_outbreak %}
+<div class="feature-tag-row" style="margin-bottom:1rem;">
+    {% for k, v in training_outbreak %}<span class="feature-tag">{{ k }}: {{ v }}</span>{% endfor %}
+</div>
+{% endif %}
+
+<div class="chart-row">
+    <div class="card" style="margin-bottom:0;">
+        <h2>Latest Window per Region — Total vs Positive</h2>
+        <p class="card-sub">Bar chart: the most recent time window scored by the GBT model for each region.</p>
+        <div class="chart-box"><canvas id="outbreakChart"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+        <h2>Predicted Status (all windows)</h2>
+        <p class="card-sub">Doughnut: how many region/time windows the model flagged as outbreak vs stable.</p>
+        <div class="chart-box"><canvas id="statusChart"></canvas></div>
+    </div>
+</div>
+
+<div class="chart-row">
+    <div class="card" style="margin-bottom:0;">
+        <h2>Positive Cases Over Time — Outbreak Points in Red</h2>
+        <p class="card-sub">Line chart: one line per region. A <strong style="color:#dc2626">red dot</strong> = the model predicts an outbreak at that moment.</p>
+        <div class="chart-box"><canvas id="timelineChart"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+        <h2>Outbreak vs Stable Windows by Region</h2>
+        <p class="card-sub">Stacked bars: which regions are flagged most often.</p>
+        <div class="chart-box"><canvas id="stackChart"></canvas></div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>How an "Outbreak" Is Defined (Histogram)</h2>
+    <p class="card-sub">
+        Histogram of positive cases per window. Windows above the 75th percentile{% if threshold is not None %} (threshold ≈ <strong>{{ threshold }}</strong> positive cases){% endif %}
+        are labeled outbreak (<span style="color:#dc2626;font-weight:700;">red bars</span>) — this is the label the GBT model learns to predict.
+    </p>
+    <div class="chart-box" style="height:260px;"><canvas id="histChart"></canvas></div>
+</div>
+
+<div class="chart-row">
+    <div class="card" style="margin-bottom:0;">
+        <h2>What Drives Outbreaks? (Feature Importance)</h2>
+        <p class="card-sub">Longer bar = this variable influences the GBT prediction more.</p>
+        <div class="chart-box"><canvas id="fiOutChart"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+        <h2>Outbreak Prediction — Detail</h2>
+        <table>
+            <thead><tr><th>Region</th><th>Window</th><th>Total</th><th>Positive</th><th>Status</th></tr></thead>
+            <tbody>
+            {% for p in latest_by_region %}
+                <tr>
+                    <td><span class="region-pill">{{ p.region_id }}</span></td>
+                    <td>{{ p.date|date:"H:i" }}</td>
+                    <td>{{ p.total_cases }}</td>
+                    <td>{{ p.positive_cases }}</td>
+                    <td>{% if p.prediction == 1.0 %}<span class="badge outbreak">Likely Outbreak</span>{% else %}<span class="badge stable">Stable</span>{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ================= MODEL 1 : CASE RISK ================= -->
+<div class="page-title" style="font-size:1.2rem;margin-top:1rem;">Model 1 — Individual Case Risk <span class="model-tag">Random Forest</span></div>
+{% if training_case %}
+<div class="feature-tag-row" style="margin-bottom:1rem;">
+    {% for k, v in training_case %}<span class="feature-tag">{{ k }}: {{ v }}</span>{% endfor %}
+</div>
+{% endif %}
+
+{% if metrics_case %}
+<div class="stat-grid">
+    <div class="stat-card"><div><div class="label">Accuracy</div><div class="value">{{ metrics_case.accuracy }}%</div></div></div>
+    <div class="stat-card"><div><div class="label">Precision</div><div class="value">{{ metrics_case.precision }}%</div></div></div>
+    <div class="stat-card"><div><div class="label">Recall</div><div class="value">{{ metrics_case.recall }}%</div></div></div>
+    <div class="stat-card"><div><div class="label">F1-score</div><div class="value">{{ metrics_case.f1 }}%</div></div></div>
+</div>
+{% endif %}
+
+<div class="chart-row">
+    {% if cm %}
+    <div class="card" style="margin-bottom:0;">
+        <h2>Confusion Matrix</h2>
+        <p class="card-sub">Real outcome vs model prediction on {{ metrics_case.n }} scored cases. Green = correct, red = mistake.</p>
+        <div class="cm-grid">
+            <div></div><div class="cm-head">Predicted<br>Negative</div><div class="cm-head">Predicted<br>Positive</div>
+            <div class="cm-head">Actual<br>Negative</div>
+            <div class="cm-cell cm-good"><span class="n">{{ cm.tn }}</span><span class="t">True Negative</span></div>
+            <div class="cm-cell cm-bad"><span class="n">{{ cm.fp }}</span><span class="t">False Alarm</span></div>
+            <div class="cm-head">Actual<br>Positive</div>
+            <div class="cm-cell cm-bad"><span class="n">{{ cm.fn }}</span><span class="t">Missed Case</span></div>
+            <div class="cm-cell cm-good"><span class="n">{{ cm.tp }}</span><span class="t">True Positive</span></div>
+        </div>
+    </div>
+    {% endif %}
+    <div class="card" style="margin-bottom:0;">
+        <h2>What Drives Individual Risk? (Feature Importance)</h2>
+        <p class="card-sub">Random Forest: which patient / weather variables matter most.</p>
+        <div class="chart-box"><canvas id="fiCaseChart"></canvas></div>
+    </div>
+</div>
+
+<div class="chart-row">
+    <div class="card" style="margin-bottom:0;">
+        <h2>Share Predicted Positive by Region</h2>
+        <p class="card-sub">Horizontal bars: average model output per region (0 = all negative, 1 = all positive).</p>
+        <div class="chart-box"><canvas id="riskScoreChart"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+        <h2>Risk Score Table</h2>
+        <table>
+            <thead><tr><th>Region</th><th>Cases Evaluated</th><th>Avg Risk</th></tr></thead>
+            <tbody>
+            {% for c in case_pred_summary %}
+                <tr>
+                    <td><span class="region-pill">{{ c.region_id }}</span></td>
+                    <td>{{ c.total }}</td>
+                    <td>{{ c.avg_risk|floatformat:3 }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{{ charts|json_script:"charts-data" }}
+
+<script>
+    const C = JSON.parse(document.getElementById('charts-data').textContent);
+
+    const css = getComputedStyle(document.documentElement);
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.color = css.getPropertyValue('--text-muted').trim() || '#64748b';
+    Chart.defaults.borderColor = 'rgba(128,128,128,0.15)';
+    const legendBottom = { legend: { position: 'bottom' } };
+    const base = { responsive: true, maintainAspectRatio: false };
+    const pct = v => v + '%';
+
+    // Bar : dernière fenêtre par région
+    new Chart(document.getElementById('outbreakChart'), {
+        type: 'bar',
+        data: { labels: C.latest_labels, datasets: [
+            { label: 'Total Cases', data: C.latest_totals, backgroundColor: '#94a3b8', borderRadius: 6 },
+            { label: 'Positive Cases', data: C.latest_positives, backgroundColor: '#dc2626', borderRadius: 6 }
+        ]},
+        options: { ...base, plugins: legendBottom, scales: { y: { beginAtZero: true } } }
+    });
+
+    // Doughnut : statut prédit
+    new Chart(document.getElementById('statusChart'), {
+        type: 'doughnut',
+        data: { labels: ['Likely Outbreak', 'Stable'], datasets: [{ data: C.status, backgroundColor: ['#dc2626', '#059669'], borderWidth: 0 }] },
+        options: { ...base, plugins: legendBottom, cutout: '60%' }
+    });
+
+    // Ligne : positifs par fenêtre, points rouges = épidémie
+    new Chart(document.getElementById('timelineChart'), {
+        type: 'line',
+        data: { labels: C.timeline_labels, datasets: C.timeline_datasets },
+        options: { ...base, plugins: legendBottom, scales: { y: { beginAtZero: true, title: { display: true, text: 'Positive cases' } } } }
+    });
+
+    // Barres empilées
+    new Chart(document.getElementById('stackChart'), {
+        type: 'bar',
+        data: { labels: C.stack_labels, datasets: [
+            { label: 'Outbreak windows', data: C.stack_outbreak, backgroundColor: '#dc2626' },
+            { label: 'Stable windows', data: C.stack_stable, backgroundColor: '#059669' }
+        ]},
+        options: { ...base, plugins: legendBottom, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+    });
+
+    // Histogramme : distribution des positifs par fenêtre
+    new Chart(document.getElementById('histChart'), {
+        type: 'bar',
+        data: { labels: C.hist_labels, datasets: [
+            { label: 'Number of windows', data: C.hist_counts, backgroundColor: C.hist_colors, categoryPercentage: 1.0, barPercentage: 0.95 }
+        ]},
+        options: { ...base, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, title: { display: true, text: 'Number of windows' } },
+                      x: { title: { display: true, text: 'Positive cases in the window' } } } }
+    });
+
+    // Feature importance (2 modèles)
+    function fiChart(id, labels, values, color) {
+        new Chart(document.getElementById(id), {
+            type: 'bar',
+            data: { labels: labels, datasets: [{ label: 'Importance (%)', data: values, backgroundColor: color, borderRadius: 6 }] },
+            options: { ...base, indexAxis: 'y', plugins: { legend: { display: false } },
+                scales: { x: { beginAtZero: true, ticks: { callback: pct } } } }
+        });
+    }
+    fiChart('fiOutChart', C.fi_out_labels, C.fi_out_values, '#7c3aed');
+    fiChart('fiCaseChart', C.fi_case_labels, C.fi_case_values, '#0891b2');
+
+    // Risque moyen par région
+    new Chart(document.getElementById('riskScoreChart'), {
+        type: 'bar',
+        data: { labels: C.risk_labels, datasets: [{ label: 'Avg Risk Score', data: C.risk_values, backgroundColor: '#0891b2', borderRadius: 6 }] },
+        options: { ...base, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, max: 1 } } }
+    });
+
+    initAutoRefresh(30);
+</script>
+{% endblock %}

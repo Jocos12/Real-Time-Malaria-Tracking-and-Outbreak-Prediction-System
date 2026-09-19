@@ -1,0 +1,331 @@
+{% extends "core/base.html" %}
+{% block title %}Operational — Malaria Tracking{% endblock %}
+{% block header_title %}Operational View{% endblock %}
+
+{% block content %}
+<div class="page-title">
+    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
+    Operational View
+</div>
+<div class="page-subtitle"><span class="live-dot"></span>Live data from MySQL, fed automatically by Kafka Connect</div>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <span class="stat-icon-wrap neutral"><svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 13l3-3 3 3 5-6"/></svg></span>
+        <div><div class="label">Total Cases Recorded</div></div><div class="value" data-count="{{ total_cases }}" data-metric="total_cases">0</div>
+    </div>
+    <div class="stat-card danger">
+        <span class="stat-icon-wrap danger"><svg class="icon" viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg></span>
+        <div><div class="label">Positive Cases</div><div class="value" data-count="{{ total_positive }}" data-metric="total_positive">0</div></div>
+    </div>
+    <div class="stat-card safe">
+        <span class="stat-icon-wrap safe"><svg class="icon" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+        <div><div class="label">Regions Monitored</div><div class="value" data-count="{{ region_summary|length }}" data-metric="region_count">0</div></div>
+    </div>
+</div>
+
+<!-- ROW 1 : Bar + Doughnut -->
+<div class="chart-row">
+    <div class="card" style="margin-bottom:0;">
+        <h2>Cases by Region — Total vs Positive</h2>
+        <p class="card-sub">Bar chart: compares the volume of reports and confirmed malaria cases in each region.</p>
+        <div class="chart-box"><canvas id="regionBarChart"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+        <h2>Test Result Distribution</h2>
+        <p class="card-sub">Doughnut: share of positive vs negative rapid tests.</p>
+        <div class="chart-box"><canvas id="resultPieChart"></canvas></div>
+    </div>
+</div>
+
+<!-- ROW 2 : Line + Gender pie -->
+<div class="chart-row">
+    <div class="card" style="margin-bottom:0;">
+        <h2>Cases Over Time (per minute)</h2>
+        <p class="card-sub">Line chart: real-time flow of reports coming from Kafka. A peak means a burst of cases.</p>
+        <div class="chart-box"><canvas id="timelineChart"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+        <h2>Patients by Gender</h2>
+        <p class="card-sub">Pie chart: who is being tested.</p>
+        <div class="chart-box"><canvas id="genderChart"></canvas></div>
+    </div>
+</div>
+
+<!-- ROW 3 : Histograms -->
+<div class="chart-row">
+    <div class="card" style="margin-bottom:0;">
+        <h2>Age Distribution (Histogram)</h2>
+        <p class="card-sub">Histogram: number of patients per age group, and how many are positive.</p>
+        <div class="chart-box"><canvas id="ageChart"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+        <h2>Positivity Rate vs Rainfall</h2>
+        <p class="card-sub">Histogram: % of positive tests for each rainfall level — shows the climate link used by the ML model.</p>
+        <div class="chart-box"><canvas id="rainChart"></canvas></div>
+    </div>
+</div>
+
+<!-- ROW 4 : Positivity by region -->
+<div class="card">
+    <h2>Positivity Rate by Region (%)</h2>
+    <p class="card-sub">Horizontal bars: the longer the bar, the higher the share of positive tests. Easiest way to spot the most affected region.</p>
+    <div class="chart-box" style="height:260px;"><canvas id="positivityChart"></canvas></div>
+</div>
+
+<div class="card">
+    <h2>Region Summary</h2>
+    <table>
+        <thead><tr><th>Region</th><th>Total Cases</th><th>Positive Cases</th><th>Positivity Rate</th></tr></thead>
+        <tbody data-table="region-summary">
+        {% for r in region_summary %}
+            <tr>
+                <td><span class="region-pill">{{ r.region_id }}</span></td>
+                <td>{{ r.total_cases }}</td>
+                <td>{{ r.positive_cases }}</td>
+                <td>{% widthratio r.positive_cases r.total_cases 100 %}%</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Recent Reported Cases</h2>
+    <table>
+        <thead><tr><th>Case ID</th><th>Region</th><th>District</th><th>Age</th><th>Gender</th><th>Test Result</th><th>Timestamp</th></tr></thead>
+       <tbody data-table="recent-cases">
+        {% for c in recent_cases %}
+            <tr>
+                <td>{{ c.case_id|truncatechars:12 }}</td>
+                <td>{{ c.region_id }}</td>
+                <td>{{ c.district }}</td>
+                <td>{{ c.patient_age }}</td>
+                <td>{{ c.get_gender_display }}</td>
+                <td>
+                    {% if c.rapid_test_result == "positive" %}
+                        <span class="badge positive">Positive</span>
+                    {% else %}
+                        <span class="badge negative">Negative</span>
+                    {% endif %}
+                </td>
+                <td>{{ c.timestamp }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="7">No cases found.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{{ charts|json_script:"charts-data" }}
+
+<script>
+    // ---------- Compteurs animés (première charge + refresh live) ----------
+    function animateCount(el, target) {
+        var start = null;
+        var from = parseInt(el.textContent.replace(/,/g, ''), 10) || 0;
+        var duration = 700;
+        function step(ts) {
+            if (!start) start = ts;
+            var p = Math.min((ts - start) / duration, 1);
+            var current = Math.round(from + (target - from) * (1 - Math.pow(1 - p, 3)));
+            el.textContent = current.toLocaleString('en-US');
+            if (p < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    document.querySelectorAll('.value[data-count]').forEach(function(el) {
+        var target = parseInt(el.getAttribute('data-count'), 10) || 0;
+        animateCount(el, target);
+    });
+
+    const C = JSON.parse(document.getElementById('charts-data').textContent);
+
+    // Style global (compatible dark mode)
+    const css = getComputedStyle(document.documentElement);
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.color = css.getPropertyValue('--text-muted').trim() || '#64748b';
+    Chart.defaults.borderColor = 'rgba(128,128,128,0.15)';
+    const legendBottom = { legend: { position: 'bottom' } };
+    const base = { responsive: true, maintainAspectRatio: false, animation: { duration: 400 } };
+
+    // 1) Bar groupé
+    const regionBarChart = new Chart(document.getElementById('regionBarChart'), {
+        type: 'bar',
+        data: { labels: C.region_labels, datasets: [
+            { label: 'Total Cases', data: C.region_totals, backgroundColor: '#94a3b8', borderRadius: 6 },
+            { label: 'Positive Cases', data: C.region_positives, backgroundColor: '#dc2626', borderRadius: 6 }
+        ]},
+        options: { ...base, plugins: legendBottom, scales: { y: { beginAtZero: true } } }
+    });
+
+    // 2) Doughnut résultats
+    const resultPieChart = new Chart(document.getElementById('resultPieChart'), {
+        type: 'doughnut',
+        data: { labels: ['Positive', 'Negative'], datasets: [{ data: C.pie, backgroundColor: ['#dc2626', '#059669'], borderWidth: 0 }] },
+        options: { ...base, plugins: legendBottom, cutout: '60%' }
+    });
+
+    // 3) Ligne temporelle
+    const timelineChart = new Chart(document.getElementById('timelineChart'), {
+        type: 'line',
+        data: { labels: C.timeline_labels, datasets: [
+            { label: 'Total', data: C.timeline_total, borderColor: '#0891b2', backgroundColor: 'rgba(8,145,178,0.15)', fill: true, tension: 0.35 },
+            { label: 'Positive', data: C.timeline_positive, borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.12)', fill: true, tension: 0.35 }
+        ]},
+        options: { ...base, plugins: legendBottom, scales: { y: { beginAtZero: true } } }
+    });
+
+    // 4) Pie genre
+    const genderChart = new Chart(document.getElementById('genderChart'), {
+        type: 'pie',
+        data: { labels: C.gender_labels, datasets: [{ data: C.gender_values, backgroundColor: ['#0891b2', '#7c3aed', '#94a3b8'], borderWidth: 0 }] },
+        options: { ...base, plugins: legendBottom }
+    });
+
+    // 5) Histogramme âge (barres collées)
+    const ageChart = new Chart(document.getElementById('ageChart'), {
+        type: 'bar',
+        data: { labels: C.age_labels, datasets: [
+            { label: 'All patients', data: C.age_total, backgroundColor: '#94a3b8', categoryPercentage: 1.0, barPercentage: 0.95 },
+            { label: 'Positive', data: C.age_pos, backgroundColor: '#dc2626', categoryPercentage: 1.0, barPercentage: 0.95 }
+        ]},
+        options: { ...base, plugins: legendBottom,
+            scales: { y: { beginAtZero: true, title: { display: true, text: 'Patients' } },
+                      x: { title: { display: true, text: 'Age group (years)' } } } }
+    });
+
+    // 6) Histogramme pluie -> taux de positivité
+    const rainChart = new Chart(document.getElementById('rainChart'), {
+        type: 'bar',
+        data: { labels: C.rain_labels, datasets: [
+            { label: 'Positivity rate (%)', data: C.rain_rate, backgroundColor: '#0891b2', categoryPercentage: 1.0, barPercentage: 0.95 }
+        ]},
+        options: { ...base, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: '% positive' } },
+                      x: { title: { display: true, text: 'Rainfall' } } } }
+    });
+
+    // 7) Taux de positivité par région (barres horizontales)
+    const positivityChart = new Chart(document.getElementById('positivityChart'), {
+        type: 'bar',
+        data: { labels: C.region_labels, datasets: [
+            { label: 'Positivity rate (%)', data: C.positivity, backgroundColor: '#dc2626', borderRadius: 6 }
+        ]},
+        options: { ...base, indexAxis: 'y', plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true, max: 100, title: { display: true, text: '% positive tests' } } } }
+    });
+
+    // ---------- Rafraîchissement live (sans jamais recharger la page) ----------
+    function escapeHtml(str) {
+        return String(str == null ? '' : str)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function renderRegionSummaryRow(r) {
+        var rate = r.total_cases > 0 ? Math.round((r.positive_cases / r.total_cases) * 100) : 0;
+        return '<tr>' +
+            '<td><span class="region-pill">' + escapeHtml(r.region_id) + '</span></td>' +
+            '<td>' + escapeHtml(r.total_cases) + '</td>' +
+            '<td>' + escapeHtml(r.positive_cases) + '</td>' +
+            '<td>' + rate + '%</td>' +
+        '</tr>';
+    }
+
+    function renderRecentCaseRow(c) {
+        var badge = c.rapid_test_result === 'positive'
+            ? '<span class="badge positive">Positive</span>'
+            : '<span class="badge negative">Negative</span>';
+        var caseId = String(c.case_id || '');
+        if (caseId.length > 12) caseId = caseId.slice(0, 12);
+        return '<tr>' +
+            '<td>' + escapeHtml(caseId) + '</td>' +
+            '<td>' + escapeHtml(c.region_id) + '</td>' +
+            '<td>' + escapeHtml(c.district) + '</td>' +
+            '<td>' + escapeHtml(c.patient_age) + '</td>' +
+            '<td>' + escapeHtml(c.gender) + '</td>' +
+            '<td>' + badge + '</td>' +
+            '<td>' + escapeHtml(c.timestamp) + '</td>' +
+        '</tr>';
+    }
+
+    function refreshLive() {
+        fetch("{% url 'dashboard_data_api' %}")
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                // 1) Compteurs (les clés sont à la racine du JSON, pas sous 'metrics')
+                var metricsMap = {
+                    'total_cases': data.total_cases,
+                    'total_positive': data.total_positive,
+                    'region_count': data.region_count
+                };
+                document.querySelectorAll('.value[data-metric]').forEach(function(el) {
+                    var key = el.getAttribute('data-metric');
+                    if (metricsMap[key] !== undefined) {
+                        animateCount(el, metricsMap[key]);
+                    }
+                });
+
+                // 2) Graphiques
+                if (data.charts) {
+                    const nc = data.charts;
+
+                    regionBarChart.data.labels = nc.region_labels;
+                    regionBarChart.data.datasets[0].data = nc.region_totals;
+                    regionBarChart.data.datasets[1].data = nc.region_positives;
+                    regionBarChart.update();
+
+                    resultPieChart.data.datasets[0].data = nc.pie;
+                    resultPieChart.update();
+
+                    timelineChart.data.labels = nc.timeline_labels;
+                    timelineChart.data.datasets[0].data = nc.timeline_total;
+                    timelineChart.data.datasets[1].data = nc.timeline_positive;
+                    timelineChart.update();
+
+                    genderChart.data.labels = nc.gender_labels;
+                    genderChart.data.datasets[0].data = nc.gender_values;
+                    genderChart.update();
+
+                    ageChart.data.labels = nc.age_labels;
+                    ageChart.data.datasets[0].data = nc.age_total;
+                    ageChart.data.datasets[1].data = nc.age_pos;
+                    ageChart.update();
+
+                    rainChart.data.labels = nc.rain_labels;
+                    rainChart.data.datasets[0].data = nc.rain_rate;
+                    rainChart.update();
+
+                    positivityChart.data.labels = nc.region_labels;
+                    positivityChart.data.datasets[0].data = nc.positivity;
+                    positivityChart.update();
+                }
+
+                // 3) Tableau Region Summary
+                if (data.region_summary) {
+                    var body = document.querySelector('[data-table="region-summary"]');
+                    if (body) {
+                        body.innerHTML = data.region_summary.map(renderRegionSummaryRow).join('');
+                    }
+                }
+
+                // 4) Tableau Recent Cases
+                if (data.recent_cases) {
+                    var recentBody = document.querySelector('[data-table="recent-cases"]');
+                    if (recentBody) {
+                        recentBody.innerHTML = data.recent_cases.length
+                            ? data.recent_cases.map(renderRecentCaseRow).join('')
+                            : '<tr><td colspan="7">No cases found.</td></tr>';
+                    }
+                }
+            })
+            .catch(function(err) {
+                console.error('Live refresh failed:', err);
+            });
+    }
+
+    setInterval(refreshLive, 3000);
+</script>
+{% endblock %}

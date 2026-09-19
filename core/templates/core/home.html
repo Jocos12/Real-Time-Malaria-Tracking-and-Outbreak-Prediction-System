@@ -1,0 +1,730 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Real-Time Malaria Tracking and Outbreak Prediction System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Palette alignee sur le dashboard : marine (sidebar), turquoise (accent), violet (badge Random Forest), vert (System Online) */
+:root{
+  --navy:#0b1f3a; --navy-2:#102a4c; --navy-3:#163559;
+  --teal:#0ea5c0; --teal-2:#22d3ee; --purple:#6d3fd6; --green:#22c55e; --red:#ff6b6b;
+  --header-h:66px; --dock-h:64px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--navy);color:#e8f0fa;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3{line-height:1.1;letter-spacing:-.025em;font-weight:800}
+a{color:inherit}
+button{font-family:inherit}
+:focus-visible{outline:3px solid var(--teal-2);outline-offset:3px}
+.i{width:1.25em;height:1.25em;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* ---------- HEADER ---------- */
+header{position:fixed;inset:0 0 auto 0;height:var(--header-h);z-index:50;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(1rem,3vw,2.2rem);background:rgba(11,31,58,.9);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.1)}
+.brand{display:flex;align-items:center;gap:.75rem;text-decoration:none;color:#fff}
+.brand-mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--teal),var(--teal-2));display:grid;place-items:center;color:#fff;box-shadow:0 6px 18px rgba(14,165,192,.35)}
+.brand b{display:block;font-size:1.02rem;font-weight:700;letter-spacing:-.01em;line-height:1.15}
+.brand small{display:block;font-size:.72rem;color:#8fa6c2;font-weight:500}
+nav.top{display:flex;align-items:center;gap:.35rem}
+nav.top a,nav.top button{display:inline-flex;align-items:center;gap:.45rem;font:600 .86rem 'Inter';color:#dbe6f3;text-decoration:none;background:none;border:1px solid transparent;padding:.55rem .85rem;border-radius:10px;cursor:pointer;transition:background .2s,border-color .2s}
+nav.top a:hover,nav.top button:hover{background:rgba(255,255,255,.07)}
+nav.top a.cta{background:linear-gradient(135deg,var(--teal),#0c8fa8);color:#fff;border-color:transparent;font-weight:700;box-shadow:0 6px 16px rgba(14,165,192,.3)}
+nav.top a.cta:hover{filter:brightness(1.1)}
+.online{display:inline-flex;align-items:center;gap:.5rem;padding:.4rem .8rem;border-radius:99px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#7ee2a1;font-size:.8rem;font-weight:600;margin:0 .4rem}
+.online::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--green)}
+.progress{position:fixed;top:var(--header-h);left:0;height:3px;width:0;background:linear-gradient(90deg,var(--teal),var(--teal-2));z-index:51;transition:width .5s ease}
+
+/* ---------- DECK ---------- */
+.deck{position:fixed;inset:var(--header-h) 0 0 0;overflow:hidden}
+.slide{
+  --bg:linear-gradient(160deg,#0b1f3a,#10294b);--fg:#e8f0fa;--muted:#9db3cc;--card:rgba(255,255,255,.06);--line:rgba(255,255,255,.13);--accent:var(--teal-2);--strong:#fff;
+  position:absolute;inset:0;display:flex;overflow-x:hidden;overflow-y:auto;
+  padding:2rem clamp(1.2rem,6vw,5.5rem) calc(var(--dock-h) + 2.2rem);
+  background:var(--bg);color:var(--fg);
+  opacity:0;visibility:hidden;transform:translateX(3%);
+  transition:opacity .45s ease,transform .45s ease,visibility 0s .45s;
+}
+.slide.past{transform:translateX(-3%)}
+.slide.active{opacity:1;visibility:visible;transform:none;transition:opacity .45s ease,transform .45s ease}
+.slide.light{--bg:#f3f7fb;--fg:#20344f;--muted:#5a6d86;--card:#ffffff;--line:#dbe5ef;--accent:#0b8ba3;--strong:#0b1f3a}
+.slide.light .box{box-shadow:0 1px 2px rgba(11,31,58,.05),0 8px 24px rgba(11,31,58,.05)}
+.wrap{margin:auto;width:100%;max-width:1180px;position:relative;z-index:1}
+.slide h2{font-size:clamp(1.65rem,3.3vw,2.6rem);margin-bottom:.8rem;max-width:26ch;color:var(--strong)}
+.lead{color:var(--muted);font-size:1.04rem;max-width:66ch;margin-bottom:1.6rem}
+
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.slide.active .wrap>*{animation:rise .6s cubic-bezier(.2,.7,.2,1) both}
+.slide.active .wrap>*:nth-child(2){animation-delay:.08s}
+.slide.active .wrap>*:nth-child(3){animation-delay:.16s}
+.slide.active .wrap>*:nth-child(4){animation-delay:.24s}
+.slide.active .wrap>*:nth-child(5){animation-delay:.32s}
+
+.split{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:clamp(1.5rem,4vw,3.5rem);align-items:center}
+
+/* image slots */
+.img{position:relative;overflow:hidden;border-radius:16px;background:linear-gradient(140deg,var(--navy-3),#1d5a72);border:1px solid var(--line);min-height:180px;display:flex;align-items:center;justify-content:center;text-align:center;color:#9db3cc;font-size:.8rem;padding:1rem}
+.img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.img .cap{position:absolute;left:0;right:0;bottom:0;padding:1.6rem .95rem .6rem;font-size:.75rem;text-align:left;color:#fff;background:linear-gradient(transparent,rgba(5,15,30,.82));z-index:2}
+.img.shot{background:#08182c}
+.img.shot img{object-fit:contain;background:#08182c}
+
+/* ---------- HERO ---------- */
+.hero .bg{position:absolute;inset:0;z-index:0}
+.hero .bg img{width:100%;height:100%;object-fit:cover;opacity:.55}
+.hero .bg::after,.end .bg::after{content:"";position:absolute;inset:0;background:linear-gradient(95deg,rgba(11,31,58,.97) 22%,rgba(11,31,58,.72) 62%,rgba(11,31,58,.5))}
+.hero .split{grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr)}
+.hero h1{font-size:clamp(2.2rem,4.7vw,4rem);max-width:17ch;margin-bottom:1.1rem;color:#fff}
+.hero .sub{font-size:1.14rem;color:#b7c8dc;max-width:54ch;margin-bottom:1.8rem}
+.btns{display:flex;flex-wrap:wrap;gap:.8rem}
+.btn{display:inline-flex;align-items:center;gap:.5rem;padding:.9rem 1.45rem;border-radius:12px;font-weight:700;text-decoration:none;border:1px solid rgba(255,255,255,.28);font-size:.95rem;color:#fff;background:rgba(255,255,255,.06);transition:background .2s,transform .2s}
+.btn:hover{background:rgba(255,255,255,.14)}
+.btn.primary{background:linear-gradient(135deg,var(--teal),#0c8fa8);border-color:transparent;box-shadow:0 10px 24px rgba(14,165,192,.35)}
+.btn.primary:hover{filter:brightness(1.1)}
+.status{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1.8rem}
+.chip{display:inline-flex;align-items:center;gap:.5rem;font-size:.78rem;font-weight:600;padding:.35rem .75rem;border-radius:99px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#cfe0f1}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}
+.journey{background:rgba(11,31,58,.72);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:1.4rem 1.4rem 1.1rem}
+.journey h3{font-size:1.02rem;margin-bottom:1rem;color:#fff;letter-spacing:-.01em}
+.journey ol{list-style:none;position:relative}
+.journey ol::before{content:"";position:absolute;left:17px;top:18px;bottom:18px;width:2px;background:rgba(255,255,255,.16)}
+.journey li{position:relative;display:flex;gap:.9rem;align-items:center;padding:.5rem 0;animation:glow 7.5s ease-in-out infinite;animation-delay:calc(var(--k) * 1.5s)}
+.journey .dotic{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--navy-3);border:1px solid rgba(255,255,255,.2);color:var(--teal-2);position:relative;z-index:1}
+.journey b{display:block;font-size:.9rem;color:#fff;line-height:1.2}
+.journey span.d{font-size:.76rem;color:#93a9c4}
+@keyframes glow{0%,17%{opacity:1}22%,100%{opacity:.45}}
+
+/* ---------- STATS ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1.2rem 2rem;margin:1.4rem 0 1rem}
+.stat .n{font-weight:800;font-size:clamp(2rem,4.2vw,3.2rem);line-height:1;letter-spacing:-.03em;color:#fff}
+.stat .l{color:var(--muted);font-size:.86rem;margin-top:.4rem;max-width:24ch}
+.stat.red .n{color:var(--red)}
+.stat.acc .n{color:var(--teal-2)}
+.src{font-size:.74rem;color:#7f96b3}
+.mosaic{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:230px 170px;gap:.8rem}
+.mosaic .img:first-child{grid-column:1/-1}
+
+/* ---------- IDEA ---------- */
+.trio{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0}
+.trio>div{padding:.4rem 1.6rem 1rem 0;margin-right:1.6rem;border-right:1px solid var(--line)}
+.trio>div:last-child{border-right:0;margin-right:0}
+.round{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;background:rgba(14,165,192,.13);color:var(--accent);margin-bottom:.9rem}
+.round .i{width:22px;height:22px}
+.trio h3{font-size:1.1rem;margin-bottom:.4rem;color:var(--strong);letter-spacing:-.015em}
+.trio p{color:var(--muted);font-size:.93rem}
+.speed{margin-top:1.6rem;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.2rem 1.4rem}
+.speed .row{display:grid;grid-template-columns:150px 1fr;gap:1rem;align-items:center;font-size:.85rem;margin:.5rem 0;color:var(--muted)}
+.speed .bar{height:16px;border-radius:8px;position:relative}
+.speed .old{width:100%;background:repeating-linear-gradient(90deg,#c7d3e1 0 10px,#d9e2ed 10px 20px)}
+.speed .new{width:5%;min-width:22px;background:linear-gradient(90deg,var(--teal),var(--teal-2))}
+.speed .tag-r{position:absolute;right:10px;top:-1px;font-size:.72rem;font-weight:700;color:#4c5f78;line-height:16px}
+.speed .tag-n{position:absolute;left:calc(100% + 10px);top:-1px;white-space:nowrap;font-size:.72rem;font-weight:700;color:var(--accent);line-height:16px}
+
+/* ---------- PIPELINE ---------- */
+.pipe{display:flex;align-items:stretch;overflow-x:auto;padding:.9rem .2rem 1.3rem}
+.node{flex:1 1 0;min-width:112px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:14px;padding:1rem .6rem;text-align:center;cursor:pointer;font:700 .82rem 'Inter';color:#e8f0fa;transition:transform .25s,border-color .25s,background .25s}
+.node:hover{background:rgba(255,255,255,.1)}
+.node small{display:block;font-weight:500;color:#93a9c4;margin-top:.3rem;font-size:.72rem}
+.node .ic{display:grid;place-items:center;width:44px;height:44px;margin:0 auto .6rem;border-radius:12px;background:rgba(34,211,238,.1);color:var(--teal-2);transition:background .25s,color .25s}
+.node .ic .i{width:22px;height:22px}
+.node.active{background:linear-gradient(160deg,#14507a,#0e6f8e);border-color:var(--teal-2);transform:translateY(-6px);box-shadow:0 14px 30px rgba(14,165,192,.25)}
+.node.active .ic{background:#fff;color:var(--teal)}
+.link{flex:0 0 22px;align-self:center;height:2px;background:repeating-linear-gradient(90deg,#7f96b3 0 5px,transparent 5px 10px);background-size:20px 2px;animation:march 1s linear infinite;opacity:.7}
+@keyframes march{to{background-position:20px 0}}
+.detail{background:rgba(255,255,255,.06);border:1px solid var(--line);border-left:4px solid var(--teal-2);border-radius:14px;padding:1.3rem 1.5rem;min-height:128px}
+.detail small{color:var(--teal-2);font-weight:700;font-size:.78rem}
+.detail h3{font-size:1.3rem;margin:.2rem 0 .4rem;color:#fff}
+.detail p{color:#b4c6dc;max-width:78ch}
+
+/* ---------- CARDS / TABLES ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1.1rem}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.4rem;align-items:start}
+.box{border:1px solid var(--line);border-radius:16px;padding:1.3rem;background:var(--card)}
+.box h3{font-size:1.06rem;margin-bottom:.45rem;color:var(--strong);letter-spacing:-.015em}
+.box p,.box li{color:var(--muted);font-size:.9rem}
+.box .round{width:40px;height:40px;margin-bottom:.7rem}
+.box .round .i{width:20px;height:20px}
+.tag{display:inline-block;font-size:.72rem;font-weight:700;padding:.22rem .65rem;border-radius:99px;margin:.2rem .25rem 0 0;background:rgba(14,165,192,.12);color:var(--accent)}
+.tag.p{background:var(--purple);color:#fff}
+.tag.g{background:rgba(34,197,94,.14);color:#15803d}
+.tag.n{background:rgba(148,163,184,.18);color:var(--muted)}
+.slide:not(.light) .tag.g{color:#7ee2a1}
+table.t{width:100%;border-collapse:collapse;font-size:.86rem}
+table.t th,table.t td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--line);color:var(--fg)}
+table.t th{color:var(--muted);font-weight:600;font-size:.78rem}
+table.t tr:last-child td{border-bottom:0}
+code{font-family:ui-monospace,Consolas,monospace;background:rgba(14,165,192,.12);color:var(--accent);padding:.1rem .4rem;border-radius:6px;font-size:.84em}
+.vs .item{display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--line)}
+.vs .item:last-child{border-bottom:0}
+.vs .item .round{margin:0}
+.vs h3{margin:0 0 .15rem;font-size:1.02rem;color:var(--strong)}
+.vs p{color:var(--muted);font-size:.9rem}
+.vs .big{font-size:1.9rem;font-weight:800;color:var(--accent);letter-spacing:-.03em;line-height:1.1}
+
+/* steps (demo) */
+ol.steps{list-style:none;counter-reset:s;display:grid;gap:.95rem}
+ol.steps li{counter-increment:s;display:flex;gap:.9rem;align-items:flex-start}
+ol.steps li::before{content:counter(s);flex:none;width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--teal),var(--teal-2));color:#04263a;font-weight:800;display:grid;place-items:center;font-size:.85rem}
+ol.steps li div{color:#b4c6dc;font-size:.92rem}
+ol.steps li b{color:#fff}
+
+/* storage */
+.store .box{border-top:4px solid var(--teal)}
+.store .box.h{border-top-color:var(--purple)}
+.store dl{margin:.9rem 0 1rem;display:grid;grid-template-columns:110px 1fr;gap:.45rem .8rem;font-size:.86rem}
+.store dt{color:var(--muted);font-weight:600}
+.store dd{color:var(--strong);font-weight:500}
+.paths{margin-top:1.3rem;color:var(--muted);font-size:.88rem}
+
+/* ML */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:.6rem;margin:1rem 0}
+.metric{border:1px solid var(--line);border-radius:12px;padding:.65rem .4rem;text-align:center;background:rgba(14,165,192,.05)}
+.metric b{display:block;font-size:1.35rem;font-weight:800;color:var(--accent);letter-spacing:-.02em}
+.metric span{font-size:.72rem;color:var(--muted);font-weight:500}
+.bars .row{display:flex;align-items:center;gap:.7rem;margin:.4rem 0;font-size:.8rem;color:var(--muted)}
+.bars .row .lab{width:128px;flex:none}
+.bars .row .tr{flex:1;height:12px;background:rgba(90,109,134,.16);border-radius:7px;overflow:hidden}
+.bars .row .fl{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--teal-2));border-radius:7px;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+.bars.rf .row .fl{background:linear-gradient(90deg,var(--purple),#9a7af0)}
+
+/* features */
+.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.1rem}
+.feat .box{display:flex;gap:1rem;align-items:flex-start}
+.feat .box .round{margin:0;flex:none}
+
+/* end */
+.end .bg{position:absolute;inset:0;z-index:0}
+.end .bg img{width:100%;height:100%;object-fit:cover;opacity:.4}
+.tags{margin-bottom:1.8rem}
+.tags .chip::before{display:none}
+.thanks{margin-top:2.4rem;font-size:.82rem;color:#7f96b3}
+
+/* ---------- DOCK + DOTS ---------- */
+.dock{position:fixed;left:50%;bottom:1.1rem;translate:-50% 0;z-index:60;display:flex;align-items:center;gap:.9rem;padding:.4rem .5rem;border-radius:99px;background:rgba(11,31,58,.92);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.16);box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.dock button{width:42px;height:42px;border-radius:50%;border:0;cursor:pointer;display:grid;place-items:center;background:linear-gradient(135deg,var(--teal),#0c8fa8);color:#fff;transition:filter .2s,opacity .2s}
+.dock button:hover{filter:brightness(1.15)}
+.dock button:disabled{opacity:.3;cursor:default;filter:none}
+.dock .meta{min-width:150px;text-align:center;line-height:1.2}
+.dock .meta b{display:block;font-size:.9rem;color:#fff;font-variant-numeric:tabular-nums}
+.dock .meta small{font-size:.72rem;color:#93a9c4}
+.dots{position:fixed;right:16px;top:50%;translate:0 -50%;z-index:40;display:flex;flex-direction:column;gap:10px}
+.dots a{width:10px;height:10px;border-radius:50%;background:#8aa2bf;opacity:.55;display:block;transition:transform .2s,background .2s}
+.dots a:hover{opacity:1}
+.dots a.on{background:var(--teal);opacity:1;transform:scale(1.4);box-shadow:0 0 0 3px rgba(14,165,192,.25)}
+
+@media(max-width:900px){
+  .split,.hero .split{grid-template-columns:1fr}
+  .journey{display:none}
+  .mosaic{grid-template-rows:190px 140px}
+  .grid2{grid-template-columns:1fr}
+  .trio>div{border-right:0;margin-right:0;padding-right:0}
+}
+@media(max-width:800px){
+  .dots,.online,nav.top .hide-sm{display:none}
+  .brand small{display:none}
+  .dock .meta{min-width:110px}
+  .speed .row{grid-template-columns:1fr}
+}
+@media(max-height:760px){
+  .slide{padding-top:1.2rem}
+  .slide h2{font-size:clamp(1.5rem,2.8vw,2.2rem)}
+  .lead{margin-bottom:1.1rem}
+  .mosaic{grid-template-rows:180px 130px}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .journey li{opacity:1}
+}
+</style>
+</head>
+<body>
+
+<!-- Icones -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-full" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></symbol>
+</svg>
+
+<!-- Valeurs Django lues par le JavaScript (evite le rouge dans VS Code) -->
+<div id="app-data" data-total="{{ total_cases|default:0 }}" hidden></div>
+
+<header>
+  <a class="brand" href="{% url 'home' %}">
+    <span class="brand-mark"><svg class="i" style="width:20px;height:20px"><use href="#i-activity"/></svg></span>
+    <span><b>Malaria Tracking</b><small>Outbreak Prediction System</small></span>
+  </a>
+  <nav class="top">
+    <button id="fsBtn" class="hide-sm" title="Presentation mode (F)"><svg class="i"><use href="#i-full"/></svg><span id="fsLabel">Full screen</span></button>
+    <a class="hide-sm" href="{% url 'ml_explained_view' %}">How the ML works</a>
+    <a class="hide-sm" href="{% url 'analytics_view' %}">Analytics</a>
+    <span class="online">System Online</span>
+    <a class="cta" href="{% url 'dashboard_home' %}">Open live dashboard</a>
+  </nav>
+</header>
+<div class="progress" id="progress"></div>
+<div class="dots" id="dots" aria-label="Slides"></div>
+
+<main class="deck" id="deck">
+
+<!-- 1. HERO -->
+<section class="slide hero" id="hero" data-title="Start">
+  <div class="bg"><img data-key="hero" data-local="{% static 'core/img/health-worker.png' %}" referrerpolicy="no-referrer" alt=""></div>
+  <div class="wrap split">
+    <div>
+      <h1>Real-Time Malaria Tracking and Outbreak Prediction System</h1>
+      <p class="sub">Every rapid test reported in the field travels through Kafka and HDFS, is scored by Spark MLlib, and appears on a live dashboard that shows which regions need help first.</p>
+      <div class="btns">
+        <a class="btn primary" href="#problem">Start the presentation</a>
+        <a class="btn" href="{% url 'dashboard_home' %}">Open live dashboard</a>
+      </div>
+      <div class="status">
+        <span class="chip">Kafka Pipeline: Live</span>
+        <span class="chip">HDFS Storage: Live</span>
+        <span class="chip">MLlib Models: Live</span>
+      </div>
+    </div>
+    <aside class="journey" aria-label="Path of one case through the system">
+      <h3>One rapid test, five stops</h3>
+      <ol>
+        <li style="--k:0"><span class="dotic"><svg class="i"><use href="#i-pin"/></svg></span><div><b>Field report</b><span class="d">A health worker logs a test result</span></div></li>
+        <li style="--k:1"><span class="dotic"><svg class="i"><use href="#i-layers"/></svg></span><div><b>Kafka</b><span class="d">The case joins the live stream</span></div></li>
+        <li style="--k:2"><span class="dotic"><svg class="i"><use href="#i-db"/></svg></span><div><b>HDFS + MySQL</b><span class="d">History and current state saved</span></div></li>
+        <li style="--k:3"><span class="dotic"><svg class="i"><use href="#i-zap"/></svg></span><div><b>Spark MLlib</b><span class="d">Risk and outbreak scores</span></div></li>
+        <li style="--k:4"><span class="dotic"><svg class="i"><use href="#i-chart"/></svg></span><div><b>Dashboard</b><span class="d">Alert for the region at risk</span></div></li>
+      </ol>
+    </aside>
+  </div>
+</section>
+
+<!-- 2. PROBLEM -->
+<section class="slide" id="problem" data-title="The problem">
+  <div class="wrap split">
+    <div>
+      <h2>Malaria still kills more than 600,000 people every year</h2>
+      <p class="lead">It spreads through the bite of infected Anopheles mosquitoes. Children and pregnant women are the most exposed, and rainy seasons make outbreaks far more likely.</p>
+      <div class="stats">
+        <div class="stat acc"><div class="n"><span class="count" data-to="282">0</span> M</div><div class="l">malaria cases worldwide in 2024</div></div>
+        <div class="stat red"><div class="n"><span class="count" data-to="610">0</span> K</div><div class="l">deaths in 2024</div></div>
+        <div class="stat"><div class="n"><span class="count" data-to="94">0</span>%</div><div class="l">of all cases are in the WHO African Region</div></div>
+      </div>
+      <p class="src">Source: WHO, World Malaria Report 2025 (2024 data). Photos: Wikimedia Commons.</p>
+    </div>
+    <div class="mosaic">
+      <div class="img"><img data-key="mosquito" data-local="{% static 'core/img/mosquito.jpg' %}" referrerpolicy="no-referrer" alt="Anopheles mosquito feeding"><span class="cap">Anopheles gambiae, the main malaria vector in Africa. Photo: CDC / James Gathany</span></div>
+      <div class="img"><img data-key="awareness" data-local="{% static 'core/img/awareness.png' %}" referrerpolicy="no-referrer" alt="Two children under a bednet"><span class="cap">Children are the most affected</span></div>
+      <div class="img"><img data-key="worker" data-local="{% static 'core/img/health-worker.png' %}" referrerpolicy="no-referrer" alt="Women and children receiving bednets"><span class="cap">Bednets are given out to families</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. IDEA -->
+<section class="slide light" id="idea" data-title="Our idea">
+  <div class="wrap">
+    <h2>From one reported case to a regional alert in seconds</h2>
+    <p class="lead">Today, results often reach decision makers days late. Our system streams each case as it is reported and turns it into a prediction.</p>
+    <div class="trio">
+      <div><span class="round"><svg class="i"><use href="#i-layers"/></svg></span><h3>What the Kafka stream is</h3><p>A continuous stream of malaria case reports: region, patient, symptoms, rapid test result and local weather.</p></div>
+      <div><span class="round"><svg class="i"><use href="#i-target"/></svg></span><h3>What the models predict</h3><p>Model 1: will this patient's test be positive. Model 2: is this region heading into an outbreak.</p></div>
+      <div><span class="round"><svg class="i"><use href="#i-chart"/></svg></span><h3>What the dashboard supports</h3><p>Deciding where to send tests, nets and health workers first, with an alert when a region is at risk.</p></div>
+    </div>
+    <div class="speed" aria-label="Reporting delay comparison">
+      <div class="row"><span>Paper reports</span><div class="bar old"><span class="tag-r">days</span></div></div>
+      <div class="row"><span>Streaming and ML</span><div class="bar new"><span class="tag-n">seconds</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. ARCHITECTURE -->
+<section class="slide" id="architecture" data-title="Architecture">
+  <div class="wrap">
+    <h2>The pipeline, step by step</h2>
+    <p class="lead">A record moves left to right. Click any step to see what it does.</p>
+    <div class="pipe" id="pipe"></div>
+    <div class="detail" id="detail"><small></small><h3></h3><p></p></div>
+  </div>
+</section>
+
+<!-- 5. DATA -->
+<section class="slide light" id="data" data-title="Data">
+  <div class="wrap">
+    <h2>Data generation and schema</h2>
+    <p class="lead">A Python and Faker generator sends realistic cases to the Django REST API at a rate we can change, so we can show velocity live.</p>
+    <div class="cols">
+      <div class="box"><h3>Each record contains</h3>
+        <table class="t">
+          <tr><th>Field</th><th>Meaning</th></tr>
+          <tr><td><code>case_id</code></td><td>Unique case identifier</td></tr>
+          <tr><td><code>timestamp</code></td><td>When the case was reported</td></tr>
+          <tr><td><code>region_id</code>, <code>district</code></td><td>Where the patient lives</td></tr>
+          <tr><td><code>gps_lat</code>, <code>gps_lon</code></td><td>Location</td></tr>
+          <tr><td><code>patient_age</code>, <code>gender</code></td><td>Patient profile</td></tr>
+          <tr><td><code>symptoms</code></td><td>List of symptoms</td></tr>
+          <tr><td><code>rapid_test_result</code></td><td>positive or negative</td></tr>
+          <tr><td><code>body_temperature</code></td><td>Patient fever</td></tr>
+          <tr><td><code>ambient_temperature</code>, <code>humidity</code>, <code>rainfall_mm</code></td><td>Local weather</td></tr>
+        </table>
+      </div>
+      <div class="box vs"><h3>Three Vs of big data</h3>
+        <div class="item"><span class="round"><svg class="i"><use href="#i-db"/></svg></span><div><h3>Volume</h3><div class="big"><span class="live-total">0</span></div><p>cases stored so far, kept in HDFS.</p></div></div>
+        <div class="item"><span class="round"><svg class="i"><use href="#i-zap"/></svg></span><div><h3>Velocity</h3><p>The generator's records per second is configurable, and Kafka absorbs the burst.</p></div></div>
+        <div class="item"><span class="round"><svg class="i"><use href="#i-grid"/></svg></span><div><h3>Variety</h3><p>Patient data, GPS, symptom lists and weather readings in one record.</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. KAFKA -->
+<section class="slide" id="kafka" data-title="Kafka">
+  <div class="wrap">
+    <h2>Kafka: streaming without losing a message</h2>
+    <p class="lead">The Django API is the producer. A named consumer group reads the topic in parallel, and Kafka Connect sinks the same stream into storage automatically.</p>
+    <div class="cols">
+      <div class="grid2">
+        <div class="box"><h3>Topic and partitions</h3><p>The topic is split into partitions. Records with the same key always land in the same partition, so their order is kept.</p></div>
+        <div class="box"><h3>Consumer group</h3><p>Several consumer instances share the partitions. Each partition is read by exactly one consumer of the group.</p></div>
+        <div class="box"><h3>Offsets</h3><p>An offset is the position of the last message read. It is committed, so a restarted consumer resumes where it stopped.</p></div>
+        <div class="box"><h3>Kafka Connect</h3><p>Sink connectors copy the stream to MySQL and to HDFS with no manual step.</p></div>
+      </div>
+      <div class="box" style="background:rgba(255,255,255,.05)">
+        <h3 style="color:#fff;margin-bottom:1rem">Live demo of a rebalance</h3>
+        <ol class="steps">
+          <li><div><b>Start consumer 1.</b> It takes all partitions.</div></li>
+          <li><div><b>Start consumer 2 in the same group.</b> Partitions are split between the two.</div></li>
+          <li><div><b>Stop consumer 2.</b> Kafka rebalances and consumer 1 takes its partitions back.</div></li>
+          <li><div><b>Check the lag.</b> Run <code>kafka-consumer-groups --describe</code> to show offsets and lag: nothing is lost, nothing is read twice.</div></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7. STORAGE -->
+<section class="slide light" id="hdfs" data-title="Storage">
+  <div class="wrap store">
+    <h2>Two stores, two jobs</h2>
+    <p class="lead">Fast current-state queries and full replayable history need different tools.</p>
+    <div class="cols">
+      <div class="box"><h3>MySQL: operational</h3>
+        <p>Holds the latest state for the dashboard: recent cases, totals by region, model predictions and feature importance. Quick to query, not built for years of history.</p>
+        <dl><dt>Holds</dt><dd>Latest state</dd><dt>Format</dt><dd>Relational tables</dd><dt>Read by</dt><dd>Django dashboard</dd></dl>
+        <span class="tag g">Dashboard reads here</span></div>
+      <div class="box h"><h3>HDFS: historical</h3>
+        <p>Holds the full event history as Parquet files. Files are split into blocks and replicated across nodes, so data survives a disk or node failure and can grow by adding machines.</p>
+        <dl><dt>Holds</dt><dd>Full history</dd><dt>Format</dt><dd>Parquet, replicated blocks</dd><dt>Read by</dt><dd>PySpark</dd></dl>
+        <span class="tag p">Spark reads here</span></div>
+    </div>
+    <p class="paths">HDFS paths used: <code>/malaria/clean/cases_parquet</code> <code>/malaria/models/</code> <code>/malaria/predictions/</code></p>
+  </div>
+</section>
+
+<!-- 8. ML -->
+<section class="slide light" id="ml" data-title="Machine learning">
+  <div class="wrap">
+    <h2>Two Spark MLlib models trained on our own data</h2>
+    <p class="lead">Both are trained with an 80/20 train and test split, saved to HDFS, then used for batch scoring of every record.</p>
+    <div class="cols">
+      <div class="box"><h3>Model 1: individual case risk</h3>
+        <span class="tag p">Random Forest</span><span class="tag n">100 trees</span><span class="tag n">max depth 8</span>
+        <p style="margin-top:.8rem">Input: age, region, gender, body temperature, ambient temperature, humidity, rainfall, number of symptoms. Output: 1 (likely positive) or 0.</p>
+        <div class="metrics" id="mCase"></div>
+        <div class="bars rf" id="fiCase"></div>
+      </div>
+      <div class="box"><h3>Model 2: regional outbreak</h3>
+        <span class="tag">Gradient Boosted Trees</span><span class="tag n">20 iterations</span><span class="tag n">max depth 5</span>
+        <p style="margin-top:.8rem">Cases are grouped by region and 1-minute window (a demo-scale choice; production would use days). A window above the 75th percentile of positive cases is labeled an outbreak.</p>
+        <div class="metrics" id="mOut"></div>
+        <div class="bars" id="fiOut"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 9. RESULTS -->
+<section class="slide" id="results" data-title="Results">
+  <div class="wrap">
+    <h2>What the system shows today</h2>
+    <div class="stats">
+      <div class="stat acc"><div class="n"><span class="count" data-to="{{ total_cases|default:0 }}">0</span></div><div class="l">cases stored in MySQL right now</div></div>
+      <div class="stat red"><div class="n"><span class="count" data-to="{{ total_positive|default:0 }}">0</span></div><div class="l">confirmed positive cases</div></div>
+      <div class="stat"><div class="n"><span class="count" data-to="{{ regions|default:0 }}">0</span></div><div class="l">regions monitored</div></div>
+    </div>
+    <div class="cols">
+      <div class="img shot" style="min-height:270px"><img data-key="shotOperational" data-local="{% static 'core/img/result-operational.png' %}" alt="Operational dashboard">Add screenshot: result-operational.png<span class="cap">Operational view: live counts, bars, doughnut, histograms</span></div>
+      <div class="img shot" style="min-height:270px"><img data-key="shotAnalytics" data-local="{% static 'core/img/result-analytics.png' %}" alt="Analytics dashboard">Add screenshot: result-analytics.png<span class="cap">Analytics view: outbreak forecast, confusion matrix, feature importance</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 10. FEATURES -->
+<section class="slide light" id="features" data-title="Enhancements">
+  <div class="wrap">
+    <h2>What we added beyond the reference design</h2>
+    <p class="lead">Six additions that turn the raw predictions into something a health team can act on.</p>
+    <div class="feat">
+      <div class="box"><span class="round"><svg class="i"><use href="#i-bell"/></svg></span><div><h3>Outbreak alert banner</h3><p>An alert banner appears when the GBT model flags a region as a likely outbreak.</p></div></div>
+      <div class="box"><span class="round"><svg class="i"><use href="#i-eye"/></svg></span><div><h3>Prediction explanation panel</h3><p>Feature importance charts show which variables drive each model.</p></div></div>
+      <div class="box"><span class="round"><svg class="i"><use href="#i-grid"/></svg></span><div><h3>Confusion matrix</h3><p>Shows correct predictions, false alarms and missed cases.</p></div></div>
+      <div class="box"><span class="round"><svg class="i"><use href="#i-refresh"/></svg></span><div><h3>Auto-refresh and settings</h3><p>The dashboard reloads on a timer you can change or turn off.</p></div></div>
+      <div class="box"><span class="round"><svg class="i"><use href="#i-moon"/></svg></span><div><h3>Dark and light mode</h3><p>One click in the header, remembered by the browser.</p></div></div>
+      <div class="box"><span class="round"><svg class="i"><use href="#i-book"/></svg></span><div><h3>Plain-language ML page</h3><p>"How the ML works" explains both models to non-technical viewers.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 11. CONCLUSION -->
+<section class="slide end" id="end" data-title="Conclusion">
+  <div class="bg"><img data-key="endbg" data-local="{% static 'core/img/health-worker.png' %}" referrerpolicy="no-referrer" alt=""></div>
+  <div class="wrap">
+    <h2>From a field report to a decision</h2>
+    <p class="lead">The full loop works: generate, stream, store, learn, predict, display.</p>
+    <div class="tags">
+      <span class="chip">Python</span> <span class="chip">Faker</span> <span class="chip">Django REST</span> <span class="chip">Apache Kafka</span> <span class="chip">Kafka Connect</span> <span class="chip">MySQL</span> <span class="chip">Hadoop HDFS</span> <span class="chip">PySpark</span> <span class="chip">Spark MLlib</span> <span class="chip">Chart.js</span>
+    </div>
+    <div class="btns">
+      <a class="btn primary" href="{% url 'dashboard_home' %}">Open live dashboard</a>
+      <a class="btn" href="{% url 'analytics_view' %}">See the predictions</a>
+      <a class="btn" href="{% url 'ml_explained_view' %}">How the ML works</a>
+    </div>
+    <p class="thanks">Big Data Essentials, Group Final Exam Project. Thank you.</p>
+  </div>
+</section>
+
+</main>
+
+<!-- Barre de navigation de la presentation -->
+<div class="dock" role="group" aria-label="Presentation controls">
+  <button id="prev" type="button" aria-label="Previous slide"><svg class="i"><use href="#i-left"/></svg></button>
+  <div class="meta"><b id="count">01 / 11</b><small id="ttl">Start</small></div>
+  <button id="next" type="button" aria-label="Next slide"><svg class="i"><use href="#i-right"/></svg></button>
+</div>
+
+<script>
+(function(){
+  // ---------- Reglages faciles a modifier ----------
+  // Copie ici les vrais resultats affiches par ml_case_prediction.py et ml_outbreak_prediction.py.
+  // Valeurs entre 0 et 1. Laisse null pour masquer le bloc.
+  var METRICS = {
+    case: { AUC:null, Accuracy:null, F1:null, Precision:null, Recall:null },
+    out:  { AUC:null, F1:null, Precision:null, Recall:null }
+  };
+  // Importance des variables en % (copie-la depuis la console Spark ou la page Analytics).
+  var FI = {
+    case: [], // ex: [["rainfall_mm",28],["body_temperature",22]]
+    out:  []
+  };
+
+  // ---------- Images (liens Internet) ----------
+  // Chaque image essaie d'abord le lien ci-dessous, puis le fichier local dans core/static/core/img/.
+  // Pour changer une image : clic droit sur l'image > "Copier l'adresse de l'image", puis colle-la ici.
+  var IMAGES = {
+    hero: "https://commons.wikimedia.org/wiki/Special:FilePath/An_adult_and_child_walk_by_beds_set_up_with_anti-malarial_nets_in_Tanzania.jpg?width=1600",
+    mosquito: "https://commons.wikimedia.org/wiki/Special:FilePath/Anopheles_gambiae_mosquito_feeding_1354.p_lores.jpg?width=1000",
+    awareness: "https://commons.wikimedia.org/wiki/Special:FilePath/Two_children_peek_out_from_under_an_anti-malarial_bednet_in_Zimbabwe.jpg?width=900",
+    worker: "https://commons.wikimedia.org/wiki/Special:FilePath/Women_and_children_receive_anti-malarial_nets_in_Malawi.jpg?width=1000",
+    endbg: "https://commons.wikimedia.org/wiki/Special:FilePath/Women_and_children_receive_anti-malarial_nets_in_Malawi.jpg?width=1600",
+    shotOperational: "",
+    shotAnalytics: ""
+  };
+  document.querySelectorAll('img[data-key]').forEach(function(img){
+    var remote = IMAGES[img.dataset.key], local = img.dataset.local, retried = false;
+    img.addEventListener('error', function(){
+      if(!retried && remote && local){ retried = true; img.src = local; } else { img.remove(); }
+    });
+    img.src = remote || local;
+  });
+
+  // ---------- Valeurs venant de Django ----------
+  function num(v){ return parseFloat(String(v).replace(/[^\d.]/g,'')) || 0; }
+  var liveTotal = num(document.getElementById('app-data').dataset.total);
+  document.querySelectorAll('.live-total').forEach(function(e){ e.dataset.to = liveTotal; e.classList.add('count'); });
+
+  // ---------- Pipeline interactif ----------
+  var STEPS = [
+    {ic:"cpu", n:"Data generator", s:"Python + Faker", t:"Data generator", d:"A script produces realistic case reports non-stop. The records-per-second rate is a parameter, which lets us show velocity during the demo."},
+    {ic:"globe", n:"Django REST API", s:"Producer", t:"Django REST API (Kafka producer)", d:"Receives each case, checks that every required field is present, and publishes it to the Kafka topic."},
+    {ic:"layers", n:"Kafka topic", s:"Partitions + offsets", t:"Kafka topic", d:"Stores the stream in partitions with an offset per message. It buffers bursts so nothing is lost if a downstream system is slow."},
+    {ic:"users", n:"Consumer group", s:"Custom Python", t:"Python consumer group", d:"Several instances share the partitions. Offsets are committed so a restart resumes at the right place, and business logic such as alerts can run here."},
+    {ic:"plug", n:"Kafka Connect", s:"MySQL + HDFS sinks", t:"Kafka Connect sinks", d:"Copies the stream automatically into MySQL for the dashboard and into HDFS for history, with no manual step."},
+    {ic:"db", n:"HDFS + MySQL", s:"History + current", t:"Storage layer", d:"HDFS keeps the full replicated history as Parquet. MySQL keeps the fast current view used by the dashboard."},
+    {ic:"zap", n:"PySpark + MLlib", s:"Random Forest, GBT", t:"PySpark and MLlib", d:"Reads Parquet from HDFS, cleans it, trains both models, scores every record, and writes predictions and feature importance."},
+    {ic:"chart", n:"Django dashboard", s:"Live + predictions", t:"Django dashboard", d:"Shows live operational numbers from MySQL, the ML predictions, alerts and explanations."}
+  ];
+  var pipe = document.getElementById('pipe'), detail = document.getElementById('detail');
+  var nodes = [], step = 0, timer = null;
+  STEPS.forEach(function(s,i){
+    var b = document.createElement('button'); b.className = 'node'; b.type = 'button';
+    b.innerHTML = '<span class="ic"><svg class="i" aria-hidden="true"><use href="#i-'+s.ic+'"/></svg></span>'+s.n+'<small>'+s.s+'</small>';
+    b.addEventListener('click', function(){ stopAuto(); showStep(i); });
+    pipe.appendChild(b); nodes.push(b);
+    if(i < STEPS.length-1){ var l = document.createElement('div'); l.className = 'link'; pipe.appendChild(l); }
+  });
+  function showStep(i){
+    step = i;
+    nodes.forEach(function(n,k){ n.classList.toggle('active', k===i); });
+    detail.querySelector('small').textContent = 'Step '+(i+1)+' of '+STEPS.length;
+    detail.querySelector('h3').textContent = STEPS[i].t;
+    detail.querySelector('p').textContent = STEPS[i].d;
+    if(nodes[i].scrollIntoView){ nodes[i].scrollIntoView({block:'nearest', inline:'center', behavior:'smooth'}); }
+  }
+  function stopAuto(){ clearInterval(timer); timer = null; }
+  function startAuto(){ stopAuto(); showStep(0); timer = setInterval(function(){ showStep((step+1) % STEPS.length); }, 3200); }
+
+  // ---------- Metriques et importance ----------
+  function metricsBox(id, obj){
+    var el = document.getElementById(id), any = false;
+    Object.keys(obj).forEach(function(k){
+      var v = obj[k]; if(v !== null) any = true;
+      el.insertAdjacentHTML('beforeend','<div class="metric"><b>'+(v===null?'\u2014':(v*100).toFixed(1)+'%')+'</b><span>'+k+'</span></div>');
+    });
+    if(!any) el.style.display = 'none';
+  }
+  metricsBox('mCase', METRICS.case); metricsBox('mOut', METRICS.out);
+  function fiBox(id, rows){
+    var el = document.getElementById(id);
+    rows.forEach(function(r){
+      el.insertAdjacentHTML('beforeend','<div class="row"><div class="lab">'+r[0]+'</div><div class="tr"><div class="fl" data-w="'+r[1]+'"></div></div><div>'+r[1]+'%</div></div>');
+    });
+  }
+  fiBox('fiCase', FI.case); fiBox('fiOut', FI.out);
+
+  // ---------- Compteurs ----------
+  function countUp(el){
+    var to = num(el.dataset.to), t0 = null, dur = 1200;
+    cancelAnimationFrame(el._raf || 0);
+    function tick(ts){
+      if(!t0) t0 = ts;
+      var p = Math.min((ts-t0)/dur, 1);
+      el.textContent = Math.round((1-Math.pow(1-p,3))*to).toLocaleString('en-US');
+      if(p < 1) el._raf = requestAnimationFrame(tick);
+    }
+    el._raf = requestAnimationFrame(tick);
+  }
+
+  // ---------- Presentation : diapositives, points, barre, clavier, tactile ----------
+  var slides = Array.prototype.slice.call(document.querySelectorAll('section.slide'));
+  var N = slides.length, cur = -1;
+  var dots = document.getElementById('dots');
+  var elCount = document.getElementById('count'), elTtl = document.getElementById('ttl');
+  var prevBtn = document.getElementById('prev'), nextBtn = document.getElementById('next');
+  slides.forEach(function(s){
+    var a = document.createElement('a'); a.href = '#'+s.id; a.title = s.dataset.title; a.setAttribute('aria-label', s.dataset.title);
+    dots.appendChild(a);
+  });
+
+  function enter(s){
+    s.querySelectorAll('.count').forEach(countUp);
+    s.querySelectorAll('.fl').forEach(function(f){
+      f.style.transition = 'none'; f.style.width = '0'; void f.offsetWidth; f.style.transition = '';
+      requestAnimationFrame(function(){ f.style.width = f.dataset.w + '%'; });
+    });
+    if(s.id === 'architecture'){ startAuto(); } else { stopAuto(); }
+  }
+  function show(i){
+    i = Math.max(0, Math.min(N-1, i));
+    if(i === cur) return;
+    slides.forEach(function(s,k){
+      s.classList.toggle('active', k === i);
+      s.classList.toggle('past', k < i);
+      s.setAttribute('aria-hidden', k === i ? 'false' : 'true');
+    });
+    cur = i;
+    slides[i].scrollTop = 0;
+    elCount.textContent = String(i+1).padStart(2,'0') + ' / ' + String(N).padStart(2,'0');
+    elTtl.textContent = slides[i].dataset.title;
+    prevBtn.disabled = (i === 0); nextBtn.disabled = (i === N-1);
+    document.getElementById('progress').style.width = (N > 1 ? i/(N-1)*100 : 100) + '%';
+    Array.prototype.forEach.call(dots.children, function(d,k){ d.classList.toggle('on', k === i); });
+    if(history.replaceState){ history.replaceState(null, '', '#' + slides[i].id); }
+    enter(slides[i]);
+  }
+  function indexOf(id){
+    for(var k=0;k<N;k++){ if(slides[k].id === id) return k; }
+    return -1;
+  }
+  function next(){ show(cur+1); }
+  function prev(){ show(cur-1); }
+  prevBtn.addEventListener('click', prev);
+  nextBtn.addEventListener('click', next);
+
+  // Liens internes (#problem, points de navigation...)
+  document.addEventListener('click', function(e){
+    var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
+    if(!a) return;
+    var k = indexOf(a.getAttribute('href').slice(1));
+    if(k > -1){ e.preventDefault(); show(k); }
+  });
+  window.addEventListener('hashchange', function(){
+    var k = indexOf(location.hash.slice(1)); if(k > -1) show(k);
+  });
+
+  function scrollable(){ var s = slides[cur]; return s.scrollHeight > s.clientHeight + 2; }
+  document.addEventListener('keydown', function(e){
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key;
+    if(k === 'ArrowRight' || k === 'PageDown' || (k === ' ' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A')){ e.preventDefault(); next(); }
+    else if(k === 'ArrowLeft' || k === 'PageUp'){ e.preventDefault(); prev(); }
+    else if(k === 'ArrowDown' && !scrollable()){ e.preventDefault(); next(); }
+    else if(k === 'ArrowUp' && !scrollable()){ e.preventDefault(); prev(); }
+    else if(k === 'Home'){ e.preventDefault(); show(0); }
+    else if(k === 'End'){ e.preventDefault(); show(N-1); }
+    else if(k === 'f' || k === 'F'){ toggleFs(); }
+  });
+
+  // Molette : change de diapositive quand le contenu est en haut ou en bas
+  var wheelLock = 0;
+  document.getElementById('deck').addEventListener('wheel', function(e){
+    var now = Date.now(); if(now < wheelLock || Math.abs(e.deltaY) < 30) return;
+    var s = slides[cur], atTop = s.scrollTop <= 0, atBottom = s.scrollTop + s.clientHeight >= s.scrollHeight - 2;
+    if(e.deltaY > 0 && atBottom){ wheelLock = now + 800; next(); }
+    else if(e.deltaY < 0 && atTop){ wheelLock = now + 800; prev(); }
+  }, {passive:true});
+
+  // Glisser sur ecran tactile
+  var tx = 0, ty = 0;
+  document.getElementById('deck').addEventListener('touchstart', function(e){ tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, {passive:true});
+  document.getElementById('deck').addEventListener('touchend', function(e){
+    var dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+    if(Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)*1.5){ if(dx < 0){ next(); } else { prev(); } }
+  }, {passive:true});
+
+  // Plein ecran
+  function toggleFs(){
+    if(document.fullscreenElement){ document.exitFullscreen(); }
+    else if(document.documentElement.requestFullscreen){ document.documentElement.requestFullscreen(); }
+  }
+  document.getElementById('fsBtn').addEventListener('click', toggleFs);
+  document.addEventListener('fullscreenchange', function(){
+    document.getElementById('fsLabel').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
+  });
+
+  // Demarrage
+  var start = indexOf(location.hash.slice(1));
+  show(start > -1 ? start : 0);
+})();
+</script>
+</body>
+</html>

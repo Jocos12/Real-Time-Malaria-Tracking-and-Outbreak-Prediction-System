@@ -1,0 +1,94 @@
+{% extends "core/base.html" %}
+{% block title %}Settings — Malaria Tracking{% endblock %}
+{% block header_title %}Settings{% endblock %}
+
+{% block content %}
+<div class="page-title">
+    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+    Settings
+</div>
+<div class="page-subtitle">Configure how the dashboard behaves — saved in this browser only</div>
+
+<div class="card">
+    <h2><svg class="icon" viewBox="0 0 24 24"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>Auto-Refresh</h2>
+
+    <div class="settings-row">
+        <div>
+            <div class="settings-label">Enable auto-refresh</div>
+            <div class="settings-desc">Automatically reload the Operational and Analytics pages</div>
+        </div>
+        <label class="toggle-switch">
+            <input type="checkbox" id="refreshEnabledInput">
+            <span class="toggle-slider"></span>
+        </label>
+    </div>
+
+    <div class="settings-row">
+        <div>
+            <div class="settings-label">Refresh interval</div>
+            <div class="settings-desc">How often the page reloads, in seconds</div>
+        </div>
+        <input type="number" min="5" max="300" class="num-input" id="refreshSecondsInput">
+    </div>
+
+    <div class="settings-row" style="border-bottom:none;">
+        <button class="save-btn" id="saveRefreshBtn">Save Changes</button>
+        <span class="save-confirm" id="saveConfirm">Saved!</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/></svg>Appearance</h2>
+    <div class="settings-row" style="border-bottom:none;">
+        <div>
+            <div class="settings-label">Theme</div>
+            <div class="settings-desc">Choose between light and dark mode</div>
+        </div>
+        <div class="theme-options">
+            <div class="theme-option" id="lightOption">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg> Light
+            </div>
+            <div class="theme-option" id="darkOption">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg> Dark
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var refreshEnabledInput = document.getElementById('refreshEnabledInput');
+    var refreshSecondsInput = document.getElementById('refreshSecondsInput');
+    var lightOption = document.getElementById('lightOption');
+    var darkOption = document.getElementById('darkOption');
+
+    // Load current values
+    refreshEnabledInput.checked = (localStorage.getItem('refreshEnabled') !== 'false');
+    refreshSecondsInput.value = parseInt(localStorage.getItem('refreshSeconds')) || 20;
+
+    function highlightTheme() {
+        var theme = document.documentElement.getAttribute('data-theme');
+        lightOption.classList.toggle('selected', theme !== 'dark');
+        darkOption.classList.toggle('selected', theme === 'dark');
+    }
+    highlightTheme();
+
+    lightOption.addEventListener('click', function() {
+        document.documentElement.setAttribute('data-theme', 'light');
+        localStorage.setItem('theme', 'light');
+        highlightTheme();
+    });
+    darkOption.addEventListener('click', function() {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+        highlightTheme();
+    });
+
+    document.getElementById('saveRefreshBtn').addEventListener('click', function() {
+        localStorage.setItem('refreshEnabled', refreshEnabledInput.checked);
+        localStorage.setItem('refreshSeconds', refreshSecondsInput.value);
+        var confirm = document.getElementById('saveConfirm');
+        confirm.style.opacity = '1';
+        setTimeout(function() { confirm.style.opacity = '0'; }, 2000);
+    });
+</script>
+{% endblock %}
